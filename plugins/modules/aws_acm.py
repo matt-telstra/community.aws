@@ -319,11 +319,14 @@ def main():
     client = module.client('acm')
 
     # fetch the list of certificates currently in ACM
-    certificates = acm.get_certificates(client=client,
-                                        module=module,
-                                        domain_name=module.params['domain_name'],
-                                        arn=module.params['certificate_arn'],
-                                        only_tags=tags)
+    if module.check_mode:
+        certificates = [ ]
+    else:
+        certificates = acm.get_certificates(client=client,
+                                            module=module,
+                                            domain_name=module.params['domain_name'],
+                                            arn=module.params['certificate_arn'],
+                                            only_tags=tags)
 
     module.debug("Found %d corresponding certificates in ACM" % len(certificates))
 
@@ -371,6 +374,9 @@ def main():
                                              tags=tags)
                 domain = acm.get_domain_of_cert(client=client, module=module, arn=arn)
                 module.exit_json(certificate=dict(domain_name=domain, arn=arn), changed=True)
+        if module.check_mode:
+            arn = 'arn:aws:acm:us-east-1:123456789012:certificate/01234567-abcd-abcd-abcd-012345678901'
+            module.exit_json(certificate=dict(domain_name=domain, arn=arn), changed=False)
         else:  # len(certificates) == 0
             module.debug("No certificate in ACM. Creating new one.")
             arn = acm.import_certificate(client=client,
@@ -385,9 +391,10 @@ def main():
 
     else:  # state == absent
         for cert in certificates:
-            acm.delete_certificate(client, module, cert['certificate_arn'])
+            if not module.check_mode:
+                acm.delete_certificate(client, module, cert['certificate_arn'])
         module.exit_json(arns=[cert['certificate_arn'] for cert in certificates],
-                         changed=(len(certificates) > 0))
+                         changed=(len(certificates) > 0) and (not module.check_mode))
 
 
 if __name__ == '__main__':
